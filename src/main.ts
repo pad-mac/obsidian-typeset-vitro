@@ -37,6 +37,17 @@ export default class TypesetVitroPlugin extends Plugin {
 			},
 		});
 		this.addCommand({
+			id: "copy-diagnostics",
+			name: "Copy diagnostics (for bug reports)",
+			callback: async () => {
+				const tools = await this.checkTools(true);
+				const views = this.previews().map((v) => v.diagnostics());
+				const text = JSON.stringify({ version: this.manifest.version, tools, settings: { ...this.settings, presets: undefined }, views }, null, 2);
+				await navigator.clipboard.writeText(text);
+				new Notice("Typeset Vitro diagnostics copied to the clipboard.");
+			},
+		});
+		this.addCommand({
 			id: "export-typst-template",
 			name: "Export current style as Typst template",
 			callback: () => this.exportTemplate(this.activePreset()),
@@ -184,6 +195,20 @@ export default class TypesetVitroPlugin extends Plugin {
 		}
 		if (reveal && existing) this.app.workspace.revealLeaf(leaf);
 		return leaf.view instanceof PreviewView ? leaf.view : null;
+	}
+
+	/** Open a vault PDF, bypassing plugins that take over the .pdf extension unless told otherwise. */
+	async openPdf(vaultPath: string) {
+		const file = this.app.vault.getAbstractFileByPath(vaultPath);
+		if (!(file instanceof TFile)) return;
+		const leaf = this.app.workspace.getLeaf("tab");
+		const registry = (this.app as any).viewRegistry;
+		const nativeAvailable = !!registry?.getViewCreatorByType?.("pdf");
+		if (this.settings.openPdfWith === "obsidian" && nativeAvailable) {
+			await leaf.setViewState({ type: "pdf", state: { file: file.path }, active: true });
+		} else {
+			await leaf.openFile(file);
+		}
 	}
 
 	// ---------- export / import ----------

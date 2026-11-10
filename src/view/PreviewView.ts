@@ -396,10 +396,18 @@ export class PreviewView extends ItemView {
 		if (w !== this.watcher) return;
 		this.lastResult = r;
 		this.typstDiags = r.diagnostics;
-		await this.showPages(w, r.pages);
+		this.pageError = null;
+		try {
+			await this.showPages(w, r.pages);
+		} catch (e) {
+			this.pageError = `Could not display pages: ${(e as Error).message}`;
+			console.error("Typeset Vitro: showPages failed", e);
+		}
 		this.showResultStatus();
 		this.renderMessages();
 	}
+
+	private pageError: string | null = null;
 
 	private showResultStatus() {
 		const r = this.lastResult;
@@ -424,8 +432,6 @@ export class PreviewView extends ItemView {
 				const img = el.createEl("img", { attr: { draggable: "false", alt: `Page ${i + 1}` } });
 				page = { el, img, url: null, widthPt: 595, heightPt: 842 };
 				this.pages[i] = page;
-				el.addClass("is-entering");
-				window.requestAnimationFrame(() => el.removeClass("is-entering"));
 			}
 			const changed = w.changed(file) || !page.url;
 			if (!changed) return;
@@ -435,31 +441,75 @@ export class PreviewView extends ItemView {
 			if (extra.url) URL.revokeObjectURL(extra.url);
 			extra.el.remove();
 		}
-		await Promise.all(updates);
+		// size the pages right away, so a slow or failing load never leaves them invisible
+		this.layoutPages();
+		const results = await Promise.allSettled(updates);
+		const failed = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+		if (failed.length) throw failed[0].reason;
 		this.layoutPages();
 	}
 
 	private async loadPage(page: PageEl, file: string) {
-		let svg: string;
-		try {
-			svg = await fs.promises.readFile(file, "utf8");
-		} catch {
-			return;
+		let svg = "";
+		// Windows may still hold the file briefly after Typst reports success
+		for (let attempt = 0; attempt < 4; attempt++) {
+			try {
+				svg = await fs.promises.readFile(file, "utf8");
+				if (svg.trimEnd().endsWith("</svg>")) break;
+			} catch (e) {
+				if (attempt === 3) throw new Error(`reading ${path.basename(file)}: ${(e as Error).message}`);
+			}
+			await new Promise((r) => window.setTimeout(r, 60));
 		}
+		if (!svg) throw new Error(`${path.basename(file)} is empty`);
 		const wm = svg.match(/<svg[^>]*?\swidth="([\d.]+)pt"/);
 		const hm = svg.match(/<svg[^>]*?\sheight="([\d.]+)pt"/);
 		if (wm) page.widthPt = parseFloat(wm[1]);
 		if (hm) page.heightPt = parseFloat(hm[1]);
 		const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
-		await new Promise<void>((resolve) => {
-			const pre = new Image();
-			pre.onload = pre.onerror = () => resolve();
-			pre.src = url;
-		});
+		// preload off-screen so the swap doesn't flicker; never wait more than 1.5 s
+		await Promise.race([
+			new Promise<void>((resolve) => {
+				const pre = new Image();
+				pre.onload = pre.onerror = () => resolve();
+				pre.src = url;
+			}),
+			new Promise<void>((resolve) => window.setTimeout(resolve, 1500)),
+		]);
 		const old = page.url;
 		page.img.src = url;
 		page.url = url;
 		if (old) window.setTimeout(() => URL.revokeObjectURL(old), 1000);
+	}
+
+	/** Snapshot for bug reports (command: Copy diagnostics). */
+	diagnostics(): Record<string, unknown> {
+		const pagesDir = path.join(this.cacheDir, "pages");
+		let files: string[] = [];
+		try {
+			files = fs.readdirSync(pagesDir).map((f) => `${f} (${fs.statSync(path.join(pagesDir, f)).size} B)`);
+		} catch (e) {
+			files = [`unreadable: ${(e as Error).message}`];
+		}
+		return {
+			file: this.file?.path ?? null,
+			platform: process.platform,
+			watcherRunning: !!this.watcher?.running,
+			lastResult: this.lastResult && { ok: this.lastResult.ok, pages: this.lastResult.pages.length, durationMs: this.lastResult.durationMs },
+			pageError: this.pageError,
+			contentError: this.contentError,
+			typstDiagnostics: this.typstDiags,
+			warnings: this.warnings,
+			cacheDir: this.cacheDir,
+			pageFiles: files,
+			pageElements: this.pages.map((p) => {
+				const r = p.el.getBoundingClientRect();
+				return { w: Math.round(r.width), h: Math.round(r.height), src: p.img.src.slice(0, 40), natural: [p.img.naturalWidth, p.img.naturalHeight], pt: [p.widthPt, p.heightPt] };
+			}),
+			stage: [this.stageEl.clientWidth, this.stageEl.clientHeight],
+			zoom: this.plugin.settings.zoom,
+			plugins: Object.keys((this.app as any).plugins?.plugins ?? {}),
+		};
 	}
 
 	private scale(): number {
@@ -512,6 +562,7 @@ export class PreviewView extends ItemView {
 		const warns: string[] = [...this.warnings];
 
 		if (this.contentError) errors.push({ title: this.contentError });
+		if (this.pageError) errors.push({ title: this.pageError, hint: "Run “Typeset Vitro: Copy diagnostics” and send the result." });
 		const lines = this.lastWritten.split("\n");
 		for (const d of this.typstDiags) {
 			if (d.severity === "error") {
@@ -573,10 +624,7 @@ export class PreviewView extends ItemView {
 			new Notice(`PDF saved: ${vaultPdf}`);
 			if (this.plugin.settings.openAfterExport) {
 				// give Obsidian a moment to index the new file
-				window.setTimeout(() => {
-					const pdf = this.app.vault.getAbstractFileByPath(vaultPdf);
-					if (pdf instanceof TFile) this.app.workspace.getLeaf("tab").openFile(pdf);
-				}, 400);
+				window.setTimeout(() => this.plugin.openPdf(vaultPdf), 400);
 			}
 		} catch (e) {
 			notice.hide();

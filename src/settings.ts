@@ -9,6 +9,7 @@ export interface VitroSettings {
 	bibliography: string;
 	exportFolder: string;
 	openAfterExport: boolean;
+	openPdfWith: "obsidian" | "default";
 	callouts: "quote" | "omit";
 	stripTags: boolean;
 	embedNotes: boolean;
@@ -27,6 +28,7 @@ export const DEFAULT_SETTINGS: VitroSettings = {
 	bibliography: "",
 	exportFolder: "",
 	openAfterExport: true,
+	openPdfWith: "obsidian",
 	callouts: "quote",
 	stripTags: true,
 	embedNotes: true,
@@ -176,5 +178,18 @@ export class VitroSettingTab extends PluginSettingTab {
 				await this.plugin.saveSettings();
 			})
 		);
+		new Setting(containerEl)
+			.setName("Open exported PDFs in")
+			.setDesc("Plugins like ZotFlow can take over all PDFs. “Obsidian's PDF viewer” always uses the built-in one for exports.")
+			.addDropdown((d) =>
+				d
+					.addOption("obsidian", "Obsidian's PDF viewer")
+					.addOption("default", "Default viewer for PDFs")
+					.setValue(s.openPdfWith)
+					.onChange(async (v) => {
+						s.openPdfWith = v as any;
+						await this.plugin.saveSettings();
+					})
+			);
 	}
 }
