@@ -328,7 +328,7 @@ export class PreviewView extends ItemView {
 		const id = ++this.run;
 		this.setStatus("busy", "Typesetting…");
 		try {
-			const text = this.liveText ?? this.openEditorText() ?? (await this.app.vault.cachedRead(file));
+			const text = this.liveText || this.openEditorText() || (await this.app.vault.cachedRead(file));
 			const fm = readFrontmatter(text);
 			const style = this.plugin.presetByName(fm.typeset) ?? this.plugin.activePreset();
 			const body = await buildBody(this.app, this.plugin.settings, style, file, text, this.plugin.buildContext());
@@ -609,7 +609,7 @@ export class PreviewView extends ItemView {
 		if (file !== this.file) this.setFile(file);
 		const notice = new Notice("Exporting PDF…", 0);
 		try {
-			const text = this.liveText ?? this.openEditorText() ?? (await this.app.vault.read(file));
+			const text = this.liveText || this.openEditorText() || (await this.app.vault.read(file));
 			const fm = readFrontmatter(text);
 			const style = this.plugin.presetByName(fm.typeset) ?? this.plugin.activePreset();
 			const body = await buildBody(this.app, this.plugin.settings, style, file, text, this.plugin.buildContext());

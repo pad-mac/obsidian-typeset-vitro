@@ -30,7 +30,7 @@ Add `pad-mac/obsidian-typeset-vitro` in BRAT.
    - footnotes: `[^1]` or `^[inline]`
    - citations: `[@latour1996, 45]`, `[vgl. @simondon1958, 12–14; @kittler1986]`, `@latour1996 [45]`
    - with a note style (the default is Chicago notes), every citation becomes a footnote by itself
-3. The **style panel** (slider icon) has sections for Page, Body text, Headings (H1/H2/H3+), Footnotes, Block quotes, Citations & bibliography, Title and Figures. Every change shows up within a fraction of a second. You can also drag a number field's label left or right to scrub its value.
+3. The **style panel** (slider icon) has sections for Page, Body text, Headings (H1/H2/H3+), Footnotes (the number in the text and the notes themselves), Contents, Block quotes, Citations & bibliography, Title and Figures. Every change shows up within a fraction of a second. You can also drag a number field's label left or right to scrub its value.
 4. **Export PDF** (download icon). The PDF goes next to the note, or into the folder set in the settings.
 
 ### Citations with ZotFlow

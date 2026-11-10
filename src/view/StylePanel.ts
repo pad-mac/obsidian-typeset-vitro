@@ -11,19 +11,23 @@ interface Base {
 	when?: (s: VitroStyle) => boolean;
 	/** changing this needs a new Pandoc run (citations, bibliography) */
 	content?: boolean;
+	/** shown only on this tab of a tabbed section */
+	tab?: number;
 }
 type Ctl =
 	| (Base & { kind: "number"; unit: string; min: number; max: number; step: number })
 	| (Base & { kind: "select"; options: [string, string][] | ((plugin: TypesetVitroPlugin) => [string, string][]) })
 	| (Base & { kind: "toggle" })
 	| (Base & { kind: "font"; placeholder?: string })
-	| (Base & { kind: "text"; placeholder?: string });
+	| (Base & { kind: "text"; placeholder?: string })
+	| (Base & { kind: "color"; placeholder?: string });
 
 interface Section {
 	id: string;
 	title: string;
 	icon: string;
-	levels?: boolean;
+	/** tab labels; with `substitute`, "$h" in paths becomes the tab index (heading levels) */
+	tabs?: { labels: string[]; substitute?: boolean };
 	controls: Ctl[];
 }
 
@@ -94,7 +98,15 @@ const SECTIONS: Section[] = [
 				{ when: (s) => s.page.numbering !== "none" }
 			),
 			n("Number size", "page.numberSize", "pt", 6, 16, 0.5, { when: (s) => s.page.numbering !== "none" }),
-			tog("Hide on first page", "page.hideFirstNumber", { when: (s) => s.page.numbering !== "none" }),
+			n("Numbers from page", "page.numberFrom", "", 1, 99, 1, {
+				when: (s) => s.page.numbering !== "none",
+				hint: "Pages before this one (title, contents) carry no number",
+			}),
+			tog("Count from 1 there", "page.restartNumbering", {
+				when: (s) => s.page.numbering !== "none" && s.page.numberFrom > 1,
+				hint: "Off: the number counts the pages before it too",
+			}),
+			tog("Hide on first numbered page", "page.hideFirstNumber", { when: (s) => s.page.numbering !== "none" }),
 		],
 	},
 	{
@@ -118,7 +130,7 @@ const SECTIONS: Section[] = [
 		id: "headings",
 		title: "Headings",
 		icon: "heading",
-		levels: true,
+		tabs: { labels: ["H1", "H2", "H3+"], substitute: true },
 		controls: [
 			{ kind: "font", label: "Font", path: H + "font", placeholder: "Body font" },
 			n("Size", H + "size", "pt", 6, 40, 0.5),
@@ -149,27 +161,87 @@ const SECTIONS: Section[] = [
 		id: "footnotes",
 		title: "Footnotes",
 		icon: "superscript",
+		tabs: { labels: ["Number in text", "Notes"] },
 		controls: [
-			n("Size", "footnotes.size", "pt", 5, 16, 0.5),
-			n("Line gap", "footnotes.leading", "em", 0.2, 2, 0.05),
-			n("Gap between notes", "footnotes.gap", "em", 0, 2, 0.05),
-			sel("Numbering", "footnotes.numbering", [
-				["1", "1, 2, 3"],
-				["i", "i, ii, iii"],
-				["a", "a, b, c"],
-				["*", "*, †, ‡"],
-			]),
-			sel("Number in note", "footnotes.marker", [
-				["super", "Superscript ¹"],
-				["plain", "Plain “1.”"],
-			]),
-			tog("Hanging numbers", "footnotes.hanging", { hint: "Note text aligned past the number" }),
-			n("Number column", "footnotes.hangWidth", "em", 0.5, 4, 0.1, { when: (s) => s.footnotes.hanging }),
-			n("Indent", "footnotes.indent", "em", 0, 4, 0.1, { when: (s) => !s.footnotes.hanging }),
-			tog("Justified", "footnotes.justify"),
-			n("Rule length", "footnotes.separatorLength", "%", 0, 100, 1),
-			n("Rule weight", "footnotes.separatorStroke", "pt", 0, 3, 0.1),
-			n("Space above rule", "footnotes.clearance", "em", 0, 4, 0.1),
+			sel(
+				"Numbering",
+				"footnotes.numbering",
+				[
+					["1", "1, 2, 3"],
+					["i", "i, ii, iii"],
+					["a", "a, b, c"],
+					["*", "*, †, ‡"],
+				]
+			),
+			// ---- the number in the running text
+			sel(
+				"Format",
+				"footnotes.marker.format",
+				[
+					["1", "¹"],
+					["[1]", "[¹]"],
+					["1)", "¹⁾"],
+					["(1)", "⁽¹⁾"],
+				],
+				{ tab: 0 }
+			),
+			tog("Font's superscript figures", "footnotes.marker.typographic", {
+				tab: 0,
+				hint: "Use the font's own superior figures when it has them; size and raise then don't apply. Off: Typst scales and raises the normal digits.",
+			}),
+			n("Size", "footnotes.marker.size", "%", 30, 100, 1, { tab: 0, when: (s) => !s.footnotes.marker.typographic }),
+			n("Raise", "footnotes.marker.raise", "em", 0, 1.2, 0.05, { tab: 0, when: (s) => !s.footnotes.marker.typographic }),
+			sel("Weight", "footnotes.marker.weight", WEIGHTS, { tab: 0 }),
+			n("Space before", "footnotes.marker.spaceBefore", "em", 0, 0.5, 0.01, { tab: 0, hint: "A hair space between word and number" }),
+			{ kind: "color", label: "Colour", path: "footnotes.marker.color", tab: 0, placeholder: "Text colour" },
+			// ---- the notes at the page bottom
+			n("Size", "footnotes.size", "pt", 5, 16, 0.5, { tab: 1 }),
+			n("Line gap", "footnotes.leading", "em", 0.2, 2, 0.05, { tab: 1 }),
+			n("Gap between notes", "footnotes.gap", "em", 0, 2, 0.05, { tab: 1 }),
+			sel(
+				"Number in note",
+				"footnotes.entryMarker",
+				[
+					["super", "Superscript ¹"],
+					["plain", "Plain “1.”"],
+				],
+				{ tab: 1 }
+			),
+			tog("Hanging numbers", "footnotes.hanging", { tab: 1, hint: "Note text aligned past the number" }),
+			n("Number column", "footnotes.hangWidth", "em", 0.5, 4, 0.1, { tab: 1, when: (s) => s.footnotes.hanging }),
+			n("Indent", "footnotes.indent", "em", 0, 4, 0.1, { tab: 1, when: (s) => !s.footnotes.hanging }),
+			tog("Justified", "footnotes.justify", { tab: 1 }),
+			n("Rule length", "footnotes.separatorLength", "%", 0, 100, 1, { tab: 1 }),
+			n("Rule weight", "footnotes.separatorStroke", "pt", 0, 3, 0.1, { tab: 1 }),
+			n("Space above rule", "footnotes.clearance", "em", 0, 4, 0.1, { tab: 1 }),
+		],
+	},
+	{
+		id: "toc",
+		title: "Contents",
+		icon: "list-tree",
+		controls: [
+			tog("Table of contents", "toc.show", { hint: "Generated from the headings, placed after the title" }),
+			{ kind: "text", label: "Heading", path: "toc.title", placeholder: "none", when: (s) => s.toc.show },
+			sel(
+				"Levels",
+				"toc.depth",
+				[
+					["1", "H1"],
+					["2", "H1–H2"],
+					["3", "H1–H3"],
+					["4", "H1–H4"],
+				],
+				{ when: (s) => s.toc.show }
+			),
+			n("Size", "toc.size", "pt", 6, 18, 0.5, { when: (s) => s.toc.show }),
+			n("Indent per level", "toc.indent", "em", 0, 5, 0.1, { when: (s) => s.toc.show }),
+			n("Line gap", "toc.spacing", "em", 0, 2, 0.05, { when: (s) => s.toc.show }),
+			n("Space above H1", "toc.level1Above", "em", 0, 3, 0.05, { when: (s) => s.toc.show }),
+			tog("H1 entries bold", "toc.level1Bold", { when: (s) => s.toc.show }),
+			tog("Dot leaders", "toc.leaders", { when: (s) => s.toc.show && s.toc.pageNumbers }),
+			tog("Page numbers", "toc.pageNumbers", { when: (s) => s.toc.show }),
+			tog("Own page", "toc.ownPage", { when: (s) => s.toc.show }),
 		],
 	},
 	{
@@ -233,6 +305,8 @@ const SECTIONS: Section[] = [
 		icon: "type",
 		controls: [
 			tog("Show title", "title.show", { hint: "From the note's title / subtitle / author / date frontmatter" }),
+			{ kind: "font", label: "Title font", path: "title.font", placeholder: "Body font", when: (s) => s.title.show },
+			{ kind: "font", label: "Author font", path: "title.metaFont", placeholder: "Body font", when: (s) => s.title.show, hint: "Author and date" },
 			sel(
 				"Alignment",
 				"title.align",
@@ -283,7 +357,12 @@ export interface PanelHost {
 
 export class StylePanel {
 	private open = new Set<string>(["text"]);
-	private level = 0;
+	/** active tab per section */
+	private tabOf = new Map<string, number>();
+	/** heading level being edited (tab of the headings section) */
+	private get level() {
+		return this.tabOf.get("headings") ?? 0;
+	}
 	private datalistId = "vitro-fonts-" + Math.random().toString(36).slice(2, 8);
 	private scrollEl!: HTMLElement;
 
@@ -415,18 +494,20 @@ export class StylePanel {
 			now ? this.open.add(sec.id) : this.open.delete(sec.id);
 		};
 
-		if (sec.levels) {
+		const active = this.tabOf.get(sec.id) ?? 0;
+		if (sec.tabs) {
 			const tabs = inner.createDiv({ cls: "vitro-tabs" });
-			["H1", "H2", "H3+"].forEach((label, i) => {
-				const t = tabs.createDiv({ cls: "vitro-tab" + (i === this.level ? " is-active" : ""), text: label });
+			sec.tabs.labels.forEach((label, i) => {
+				const t = tabs.createDiv({ cls: "vitro-tab" + (i === active ? " is-active" : ""), text: label });
 				t.onclick = () => {
-					this.level = i;
+					this.tabOf.set(sec.id, i);
 					this.rerenderSection(sec, wrap);
 				};
 			});
 		}
 		for (const c of sec.controls) {
 			if (c.when && !c.when(s)) continue;
+			if (sec.tabs && c.tab !== undefined && c.tab !== active) continue;
 			this.renderControl(inner, c, sec);
 		}
 	}
@@ -516,8 +597,9 @@ export class StylePanel {
 				if (c.path === "citations.style" && !options.some(([v]) => v === current)) current = "custom";
 				select.value = current;
 				select.onchange = () => {
-					let v: string = select.value;
+					let v: string | number = select.value;
 					if (c.path === "citations.style" && v === "custom") v = "";
+					if (typeof value === "number") v = Number(v);
 					this.commit(c, v, sec, row);
 				};
 				break;
@@ -529,6 +611,28 @@ export class StylePanel {
 					const v = !t.hasClass("is-enabled");
 					t.toggleClass("is-enabled", v);
 					this.commit(c, v, sec, row);
+				};
+				break;
+			}
+			case "color": {
+				const wrap = ctl.createDiv({ cls: "vitro-color" });
+				const input = wrap.createEl("input", { type: "color" });
+				input.value = value || "#000000";
+				const label2 = wrap.createSpan({ cls: "vitro-color-label", text: value ? String(value) : c.placeholder ?? "" });
+				const reset = wrap.createDiv({ cls: "clickable-icon vitro-color-reset" });
+				setIcon(reset, "x");
+				setTooltip(reset, "Use the text colour");
+				reset.toggleClass("is-hidden", !value);
+				input.oninput = () => {
+					label2.setText(input.value);
+					reset.removeClass("is-hidden");
+					this.commitQuiet(c, input.value);
+				};
+				reset.onclick = () => {
+					label2.setText(c.placeholder ?? "");
+					reset.addClass("is-hidden");
+					input.value = "#000000";
+					this.commitQuiet(c, "");
 				};
 				break;
 			}

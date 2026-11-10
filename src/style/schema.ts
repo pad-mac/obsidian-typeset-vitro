@@ -53,6 +53,10 @@ export interface VitroStyle {
 		numberAlign: "center" | "right" | "outside";
 		hideFirstNumber: boolean;
 		numberSize: number;
+		/** physical page on which page numbers start to appear */
+		numberFrom: number;
+		/** that page is numbered 1 (otherwise numbers count the pages before it) */
+		restartNumbering: boolean;
 	};
 	text: {
 		font: string;
@@ -75,7 +79,7 @@ export interface VitroStyle {
 		leading: number;
 		gap: number;
 		numbering: "1" | "i" | "a" | "*";
-		marker: "super" | "plain";
+		entryMarker: "super" | "plain";
 		hanging: boolean;
 		hangWidth: number;
 		indent: number;
@@ -83,6 +87,16 @@ export interface VitroStyle {
 		separatorStroke: number;
 		clearance: number;
 		justify: boolean;
+		/** the number in the running text */
+		marker: {
+			format: "1" | "[1]" | "1)" | "(1)";
+			typographic: boolean;
+			size: number;
+			raise: number;
+			weight: Weight;
+			spaceBefore: number;
+			color: string;
+		};
 	};
 	quotes: {
 		size: number;
@@ -105,8 +119,25 @@ export interface VitroStyle {
 		/** "bundled:chicago-notes-bibliography" | "pandoc-default" | path to .csl */
 		style: string;
 	};
+	toc: {
+		show: boolean;
+		title: string;
+		depth: number;
+		size: number;
+		level1Bold: boolean;
+		leaders: boolean;
+		pageNumbers: boolean;
+		indent: number;
+		spacing: number;
+		level1Above: number;
+		ownPage: boolean;
+	};
 	title: {
 		show: boolean;
+		/** empty = body font */
+		font: string;
+		/** author and date; empty = body font */
+		metaFont: string;
 		align: "left" | "center";
 		size: number;
 		weight: Weight;
@@ -148,6 +179,8 @@ export const BASE_STYLE: VitroStyle = {
 		numberAlign: "center",
 		hideFirstNumber: false,
 		numberSize: 10,
+		numberFrom: 1,
+		restartNumbering: true,
 	},
 	text: {
 		font: "Libertinus Serif",
@@ -174,7 +207,7 @@ export const BASE_STYLE: VitroStyle = {
 		leading: 0.55,
 		gap: 0.45,
 		numbering: "1",
-		marker: "super",
+		entryMarker: "super",
 		hanging: true,
 		hangWidth: 1.4,
 		indent: 0,
@@ -182,6 +215,15 @@ export const BASE_STYLE: VitroStyle = {
 		separatorStroke: 0.5,
 		clearance: 1.2,
 		justify: true,
+		marker: {
+			format: "1",
+			typographic: true,
+			size: 60,
+			raise: 0.5,
+			weight: "regular",
+			spaceBefore: 0,
+			color: "",
+		},
 	},
 	quotes: {
 		size: 10,
@@ -201,8 +243,23 @@ export const BASE_STYLE: VitroStyle = {
 		justify: false,
 	},
 	citations: { style: "bundled:chicago-notes-bibliography" },
+	toc: {
+		show: false,
+		title: "Inhalt",
+		depth: 2,
+		size: 11,
+		level1Bold: true,
+		leaders: true,
+		pageNumbers: true,
+		indent: 1.5,
+		spacing: 0.45,
+		level1Above: 0.9,
+		ownPage: true,
+	},
 	title: {
 		show: true,
+		font: "",
+		metaFont: "",
 		align: "left",
 		size: 20,
 		weight: "regular",
@@ -262,6 +319,12 @@ export function makeBuiltInPresets(): VitroStyle[] {
 /** Fill fields missing from older/imported presets with defaults. */
 export function normalizeStyle(raw: unknown): VitroStyle {
 	const base = clone(BASE_STYLE);
+	// ≤ 0.2: footnotes.marker was the number style inside the note
+	const r = raw as any;
+	if (r?.footnotes && typeof r.footnotes.marker === "string") {
+		r.footnotes = { ...r.footnotes, entryMarker: r.footnotes.marker };
+		delete r.footnotes.marker;
+	}
 	const merge = (target: any, src: any): any => {
 		if (Array.isArray(target)) {
 			return target.map((t, i) => (Array.isArray(src) && src[i] !== undefined ? merge(t, src[i]) : t));

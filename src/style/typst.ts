@@ -69,15 +69,45 @@ function headingRules(level: number, h: HeadingStyle, s: VitroStyle): string[] {
 function footerRule(s: VitroStyle): string | null {
 	const p = s.page;
 	if (p.numbering === "none") return null;
+	const from = Math.max(1, Math.round(p.numberFrom || 1));
+	// outside = the physical side: odd pages are right-hand pages
 	const alignExpr =
 		p.numberAlign === "outside"
 			? p.twoSided
-				? `if calc.even(n) { left } else { right }`
+				? `if calc.even(p) { left } else { right }`
 				: `right`
 			: p.numberAlign;
 	const show = `align(${alignExpr}, text(size: ${pt(p.numberSize)}, counter(page).display(${str(p.numbering)})))`;
-	const body = p.hideFirstNumber ? `if n > 1 { ${show} }` : show;
-	return `footer: context { let n = counter(page).get().first(); ${body} }`;
+	const conds = [from > 1 ? `p >= ${from}` : null, p.hideFirstNumber ? `p != ${from}` : null].filter(Boolean);
+	const body = conds.length ? `if ${conds.join(" and ")} { ${show} }` : show;
+	return `footer: context { let p = here().page(); ${body} }`;
+}
+
+/** Restart the page counter on the first numbered page (so the contents list agrees). */
+function headerRule(s: VitroStyle): string | null {
+	const from = Math.max(1, Math.round(s.page.numberFrom || 1));
+	if (s.page.numbering === "none" || from <= 1 || !s.page.restartNumbering) return null;
+	return `header: context { if here().page() == ${from} { counter(page).update(1) } }`;
+}
+
+const MARKER_PATTERNS: Record<string, [string, string]> = {
+	"1": ["", ""],
+	"[1]": ["[", "]"],
+	"1)": ["", ")"],
+	"(1)": ["(", ")"],
+};
+
+function tocRules(s: VitroStyle): string[] {
+	const t = s.toc;
+	const out = [
+		`show outline.entry: set text(size: ${pt(t.size)})`,
+		`show outline.entry: set block(spacing: ${em(t.spacing)})`,
+		`show outline.entry.where(level: 1): set block(above: ${em(t.level1Above)})`,
+		`set outline.entry(fill: ${t.leaders ? "repeat([.], gap: 0.25em)" : "none"})`,
+	];
+	if (t.level1Bold) out.push(`show outline.entry.where(level: 1): set text(weight: "bold")`);
+	if (!t.pageNumbers) out.push(`show outline.entry: it => link(it.element.location(), it.indented(it.prefix(), it.body()))`);
+	return out;
 }
 
 export function buildTemplate(s: VitroStyle): string {
@@ -94,10 +124,21 @@ export function buildTemplate(s: VitroStyle): string {
 		: `(top: ${mm(p.marginTop)}, bottom: ${mm(p.marginBottom)}, left: ${mm(p.marginInner)}, right: ${mm(p.marginOuter)})`;
 
 	const footer = footerRule(s);
+	const header = headerRule(s);
 	const pageArgs = [PAPER_ARGS[p.paper] ?? `paper: "a4"`, `margin: ${margins}`, `numbering: ${p.numbering === "none" ? "none" : str(p.numbering)}`];
+	if (header) pageArgs.push(header);
 	if (footer) pageArgs.push(footer);
 
-	const markExpr = f.marker === "super" ? "super(num)" : "[#num.]";
+	const markExpr = f.entryMarker === "super" ? "super(num)" : "[#num.]";
+	const m = f.marker;
+	const [pre, post] = MARKER_PATTERNS[m.format] ?? ["", ""];
+	// the in-text pattern may wrap the number; the note itself uses the bare one
+	const textPattern = f.numbering === "*" ? "*" : `${pre}${f.numbering}${post}`;
+	const markerRules = [
+		`show footnote: set super(typographic: ${m.typographic}, size: ${num(m.size / 100)}em, baseline: ${em(-m.raise)})`,
+		`show footnote: set text(weight: ${weight(m.weight)}${m.color ? `, fill: rgb(${str(m.color)})` : ""})`,
+		m.spaceBefore > 0 ? `show footnote: it => [#h(${em(m.spaceBefore)})#it]` : null,
+	].filter((x): x is string => !!x);
 	const footnoteEntry = f.hanging
 		? `[#set par(hanging-indent: ${em(f.hangWidth)}); #box(width: ${em(f.hangWidth)}, mark)#it.note.body]`
 		: `[#h(${em(f.indent)})#mark#h(0.25em)#it.note.body]`;
@@ -111,13 +152,14 @@ export function buildTemplate(s: VitroStyle): string {
 		...s.headings.levels.flatMap((h, i) => headingRules(i + 1, h, s)),
 		// headings below level 3 inherit level 3
 		...[4, 5, 6].flatMap((l) => headingRules(l, s.headings.levels[2], s)),
-		`set footnote(numbering: ${str(f.numbering)})`,
+		`set footnote(numbering: ${str(textPattern)})`,
+		...markerRules,
 		`set footnote.entry(separator: line(length: ${num(f.separatorLength)}%, stroke: ${pt(f.separatorStroke)}), gap: ${em(f.gap)}, clearance: ${em(f.clearance)}, indent: 0em)`,
 		`show footnote.entry: set text(size: ${pt(f.size)})`,
 		`show footnote.entry: set par(leading: ${em(f.leading)}, first-line-indent: 0em, justify: ${f.justify})`,
 		`show footnote.entry: it => context {`,
 		`  let loc = it.note.location()`,
-		`  let num = numbering(it.note.numbering, ..counter(footnote).at(loc))`,
+		`  let num = numbering(${str(f.numbering)}, ..counter(footnote).at(loc))`,
 		`  let mark = link(loc, ${markExpr})`,
 		`  ${footnoteEntry}`,
 		`}`,
@@ -130,6 +172,7 @@ export function buildTemplate(s: VitroStyle): string {
 		`show <refs>: set par(hanging-indent: ${em(b.hangingIndent)}, first-line-indent: 0em, justify: ${b.justify})`,
 		`show <refs>: set block(spacing: ${em(b.spacing)})`,
 		`show figure.caption: set text(size: ${pt(s.figures.captionSize)})`,
+		...tocRules(s),
 		`set table(inset: 6pt, stroke: none)`,
 		`show figure.where(kind: table): set figure.caption(position: top)`,
 		`show figure.where(kind: image): set figure.caption(position: bottom)`,
@@ -137,16 +180,18 @@ export function buildTemplate(s: VitroStyle): string {
 	];
 
 	const ti = s.title;
+	const titleFont = ti.font.trim() ? `font: ${fontList(ti.font)}, ` : "";
+	const metaFont = ti.metaFont.trim() ? `font: ${fontList(ti.metaFont)}, ` : "";
 	const titleFn = [
 		`#let vitro-title(title: none, subtitle: none, author: none, date: none) = {`,
 		`  if title == none { return }`,
 		`  set par(first-line-indent: 0em, justify: false)`,
 		`  block(width: 100%, below: ${em(ti.below)}, align(${ti.align}, {`,
-		`    text(size: ${pt(ti.size)}, weight: ${weight(ti.weight)}, hyphenate: false, title)`,
-		`    if subtitle != none { parbreak(); v(-0.4em); text(size: ${pt(ti.subtitleSize)}, subtitle) }`,
+		`    text(${titleFont}size: ${pt(ti.size)}, weight: ${weight(ti.weight)}, hyphenate: false, title)`,
+		`    if subtitle != none { parbreak(); v(-0.4em); text(${titleFont}size: ${pt(ti.subtitleSize)}, subtitle) }`,
 		`    if author != none or date != none {`,
 		`      parbreak(); v(0.4em)`,
-		`      set text(size: ${pt(ti.metaSize)})`,
+		`      set text(${metaFont}size: ${pt(ti.metaSize)})`,
 		`      if author != none { author }`,
 		`      if author != none and date != none { linebreak() }`,
 		`      if date != none { date }`,
@@ -155,6 +200,14 @@ export function buildTemplate(s: VitroStyle): string {
 		ti.ownPage ? `  pagebreak()` : null,
 		`}`,
 	].filter((x) => x !== null);
+
+	const toc = s.toc;
+	const tocFn = [
+		`#let vitro-toc() = {`,
+		`  outline(title: ${toc.title.trim() ? `[${escapeMarkup(toc.title.trim())}]` : "none"}, depth: ${Math.max(1, Math.min(6, Math.round(toc.depth)))}, indent: ${em(toc.indent)})`,
+		toc.ownPage ? `  pagebreak(weak: true)` : `  v(1.5em)`,
+		`}`,
+	];
 
 	return [
 		`// Typeset Vitro style: ${s.name.replace(/\n/g, " ")}`,
@@ -170,6 +223,8 @@ export function buildTemplate(s: VitroStyle): string {
 		`]`,
 		``,
 		...titleFn,
+		``,
+		...tocFn,
 		``,
 		`#let vitro(lang: ${str(t.lang || "en")}, region: none, doc) = {`,
 		...rules.map(L),
@@ -199,6 +254,7 @@ export function buildDocument(s: VitroStyle, meta: DocMeta, body: string): strin
 		const args = [arg("title", meta.title), arg("subtitle", meta.subtitle), arg("author", meta.author), arg("date", meta.date)].filter(Boolean);
 		head.push(`#vitro-title(${args.join(", ")})`);
 	}
+	if (s.toc.show) head.push(`#vitro-toc()`);
 	head.push("", "// ---- body (generated by Pandoc) ----", "");
 	return head.join("\n") + body;
 }
