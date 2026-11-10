@@ -1,7 +1,7 @@
 {
   "id": "typeset-vitro",
   "name": "Typeset Vitro",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "minAppVersion": "1.5.0",
   "description": "Live typeset preview of your notes (Pandoc + Typst) with real footnotes, Zotero citations and a visual style panel. Exports finished PDFs.",
   "author": "Patrick Mackens",

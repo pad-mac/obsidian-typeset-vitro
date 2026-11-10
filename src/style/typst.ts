@@ -100,7 +100,7 @@ const MARKER_PATTERNS: Record<string, [string, string]> = {
 function tocRules(s: VitroStyle): string[] {
 	const t = s.toc;
 	const out = [
-		`show outline.entry: set text(size: ${pt(t.size)})`,
+		`show outline.entry: set text(${t.font.trim() ? `font: ${fontList(t.font)}, ` : ""}size: ${pt(t.size)})`,
 		`show outline.entry: set block(spacing: ${em(t.spacing)})`,
 		`show outline.entry.where(level: 1): set block(above: ${em(t.level1Above)})`,
 		`set outline.entry(fill: ${t.leaders ? "repeat([.], gap: 0.25em)" : "none"})`,
@@ -204,7 +204,7 @@ export function buildTemplate(s: VitroStyle): string {
 	const toc = s.toc;
 	const tocFn = [
 		`#let vitro-toc() = {`,
-		`  outline(title: ${toc.title.trim() ? `[${escapeMarkup(toc.title.trim())}]` : "none"}, depth: ${Math.max(1, Math.min(6, Math.round(toc.depth)))}, indent: ${em(toc.indent)})`,
+		`  outline(title: ${toc.title.trim() ? `[${escapeMarkup(toc.title.trim())}]` : "none"}, depth: ${Math.max(1, Math.round(toc.depth))}, indent: ${em(toc.indent)})`,
 		toc.ownPage ? `  pagebreak(weak: true)` : `  v(1.5em)`,
 		`}`,
 	];

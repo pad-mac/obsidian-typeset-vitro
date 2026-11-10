@@ -15,7 +15,7 @@ interface Base {
 	tab?: number;
 }
 type Ctl =
-	| (Base & { kind: "number"; unit: string; min: number; max: number; step: number })
+	| (Base & { kind: "number"; unit: string; step: number })
 	| (Base & { kind: "select"; options: [string, string][] | ((plugin: TypesetVitroPlugin) => [string, string][]) })
 	| (Base & { kind: "toggle" })
 	| (Base & { kind: "font"; placeholder?: string })
@@ -31,13 +31,12 @@ interface Section {
 	controls: Ctl[];
 }
 
-const n = (label: string, path: Path, unit: string, min: number, max: number, step: number, extra: Partial<Base> = {}): Ctl => ({
+/** Number field. No min/max on purpose: any value is allowed, the step only sets arrow keys and scrubbing. */
+const n = (label: string, path: Path, unit: string, step: number, extra: Partial<Base> = {}): Ctl => ({
 	kind: "number",
 	label,
 	path,
 	unit,
-	min,
-	max,
 	step,
 	...extra,
 });
@@ -76,12 +75,12 @@ const SECTIONS: Section[] = [
 		controls: [
 			sel("Format", "page.paper", Object.entries(PAPERS)),
 			tog("Two-sided", "page.twoSided", { hint: "Mirror margins for printing as a book" }),
-			n("Top", "page.marginTop", "mm", 5, 80, 1),
-			n("Bottom", "page.marginBottom", "mm", 5, 80, 1),
-			n("Inner", "page.marginInner", "mm", 5, 80, 1, { when: (s) => s.page.twoSided }),
-			n("Outer", "page.marginOuter", "mm", 5, 80, 1, { when: (s) => s.page.twoSided }),
-			n("Left", "page.marginInner", "mm", 5, 80, 1, { when: (s) => !s.page.twoSided }),
-			n("Right", "page.marginOuter", "mm", 5, 80, 1, { when: (s) => !s.page.twoSided }),
+			n("Top", "page.marginTop", "mm", 1),
+			n("Bottom", "page.marginBottom", "mm", 1),
+			n("Inner", "page.marginInner", "mm", 1, { when: (s) => s.page.twoSided }),
+			n("Outer", "page.marginOuter", "mm", 1, { when: (s) => s.page.twoSided }),
+			n("Left", "page.marginInner", "mm", 1, { when: (s) => !s.page.twoSided }),
+			n("Right", "page.marginOuter", "mm", 1, { when: (s) => !s.page.twoSided }),
 			sel("Page numbers", "page.numbering", [
 				["none", "None"],
 				["1", "1, 2, 3"],
@@ -97,8 +96,8 @@ const SECTIONS: Section[] = [
 				],
 				{ when: (s) => s.page.numbering !== "none" }
 			),
-			n("Number size", "page.numberSize", "pt", 6, 16, 0.5, { when: (s) => s.page.numbering !== "none" }),
-			n("Numbers from page", "page.numberFrom", "", 1, 99, 1, {
+			n("Number size", "page.numberSize", "pt", 0.5, { when: (s) => s.page.numbering !== "none" }),
+			n("Numbers from page", "page.numberFrom", "", 1, {
 				when: (s) => s.page.numbering !== "none",
 				hint: "Pages before this one (title, contents) carry no number",
 			}),
@@ -115,10 +114,10 @@ const SECTIONS: Section[] = [
 		icon: "pilcrow",
 		controls: [
 			{ kind: "font", label: "Font", path: "text.font" },
-			n("Size", "text.size", "pt", 6, 24, 0.5),
-			n("Line gap", "text.leading", "em", 0.2, 2.5, 0.05, { hint: "Space between lines. 0.65 is Typst's default, ~1.0 looks like Word's 1.5 spacing." }),
-			n("Paragraph gap", "text.parSpacing", "em", 0, 3, 0.05, { hint: "Extra space between paragraphs. Same as the line gap = no visible gap." }),
-			n("First-line indent", "text.indent", "em", 0, 5, 0.1),
+			n("Size", "text.size", "pt", 0.5),
+			n("Line gap", "text.leading", "em", 0.05, { hint: "Space between lines. 0.65 is Typst's default, ~1.0 looks like Word's 1.5 spacing." }),
+			n("Paragraph gap", "text.parSpacing", "em", 0.05, { hint: "Extra space between paragraphs. Same as the line gap = no visible gap." }),
+			n("First-line indent", "text.indent", "em", 0.1),
 			tog("Indent after headings", "text.indentAll"),
 			tog("Justified", "text.justify"),
 			tog("Hyphenation", "text.hyphenate"),
@@ -133,7 +132,7 @@ const SECTIONS: Section[] = [
 		tabs: { labels: ["H1", "H2", "H3+"], substitute: true },
 		controls: [
 			{ kind: "font", label: "Font", path: H + "font", placeholder: "Body font" },
-			n("Size", H + "size", "pt", 6, 40, 0.5),
+			n("Size", H + "size", "pt", 0.5),
 			sel("Weight", H + "weight", WEIGHTS),
 			tog("Italic", H + "italic"),
 			tog("Small caps", H + "smallCaps"),
@@ -141,8 +140,8 @@ const SECTIONS: Section[] = [
 				["left", "Left"],
 				["center", "Centered"],
 			]),
-			n("Space above", H + "above", "em", 0, 6, 0.1),
-			n("Space below", H + "below", "em", 0, 4, 0.1),
+			n("Space above", H + "above", "em", 0.1),
+			n("Space below", H + "below", "em", 0.1),
 			tog("Numbered", H + "numbered"),
 			sel(
 				"Number format",
@@ -189,15 +188,15 @@ const SECTIONS: Section[] = [
 				tab: 0,
 				hint: "Use the font's own superior figures when it has them; size and raise then don't apply. Off: Typst scales and raises the normal digits.",
 			}),
-			n("Size", "footnotes.marker.size", "%", 30, 100, 1, { tab: 0, when: (s) => !s.footnotes.marker.typographic }),
-			n("Raise", "footnotes.marker.raise", "em", 0, 1.2, 0.05, { tab: 0, when: (s) => !s.footnotes.marker.typographic }),
+			n("Size", "footnotes.marker.size", "%", 1, { tab: 0, when: (s) => !s.footnotes.marker.typographic }),
+			n("Raise", "footnotes.marker.raise", "em", 0.05, { tab: 0, when: (s) => !s.footnotes.marker.typographic }),
 			sel("Weight", "footnotes.marker.weight", WEIGHTS, { tab: 0 }),
-			n("Space before", "footnotes.marker.spaceBefore", "em", 0, 0.5, 0.01, { tab: 0, hint: "A hair space between word and number" }),
+			n("Space before", "footnotes.marker.spaceBefore", "em", 0.01, { tab: 0, hint: "A hair space between word and number" }),
 			{ kind: "color", label: "Colour", path: "footnotes.marker.color", tab: 0, placeholder: "Text colour" },
 			// ---- the notes at the page bottom
-			n("Size", "footnotes.size", "pt", 5, 16, 0.5, { tab: 1 }),
-			n("Line gap", "footnotes.leading", "em", 0.2, 2, 0.05, { tab: 1 }),
-			n("Gap between notes", "footnotes.gap", "em", 0, 2, 0.05, { tab: 1 }),
+			n("Size", "footnotes.size", "pt", 0.5, { tab: 1 }),
+			n("Line gap", "footnotes.leading", "em", 0.05, { tab: 1 }),
+			n("Gap between notes", "footnotes.gap", "em", 0.05, { tab: 1 }),
 			sel(
 				"Number in note",
 				"footnotes.entryMarker",
@@ -208,12 +207,12 @@ const SECTIONS: Section[] = [
 				{ tab: 1 }
 			),
 			tog("Hanging numbers", "footnotes.hanging", { tab: 1, hint: "Note text aligned past the number" }),
-			n("Number column", "footnotes.hangWidth", "em", 0.5, 4, 0.1, { tab: 1, when: (s) => s.footnotes.hanging }),
-			n("Indent", "footnotes.indent", "em", 0, 4, 0.1, { tab: 1, when: (s) => !s.footnotes.hanging }),
+			n("Number column", "footnotes.hangWidth", "em", 0.1, { tab: 1, when: (s) => s.footnotes.hanging }),
+			n("Indent", "footnotes.indent", "em", 0.1, { tab: 1, when: (s) => !s.footnotes.hanging }),
 			tog("Justified", "footnotes.justify", { tab: 1 }),
-			n("Rule length", "footnotes.separatorLength", "%", 0, 100, 1, { tab: 1 }),
-			n("Rule weight", "footnotes.separatorStroke", "pt", 0, 3, 0.1, { tab: 1 }),
-			n("Space above rule", "footnotes.clearance", "em", 0, 4, 0.1, { tab: 1 }),
+			n("Rule length", "footnotes.separatorLength", "%", 1, { tab: 1 }),
+			n("Rule weight", "footnotes.separatorStroke", "pt", 0.1, { tab: 1 }),
+			n("Space above rule", "footnotes.clearance", "em", 0.1, { tab: 1 }),
 		],
 	},
 	{
@@ -223,6 +222,7 @@ const SECTIONS: Section[] = [
 		controls: [
 			tog("Table of contents", "toc.show", { hint: "Generated from the headings, placed after the title" }),
 			{ kind: "text", label: "Heading", path: "toc.title", placeholder: "none", when: (s) => s.toc.show },
+			{ kind: "font", label: "Font", path: "toc.font", placeholder: "Body font", when: (s) => s.toc.show },
 			sel(
 				"Levels",
 				"toc.depth",
@@ -234,10 +234,10 @@ const SECTIONS: Section[] = [
 				],
 				{ when: (s) => s.toc.show }
 			),
-			n("Size", "toc.size", "pt", 6, 18, 0.5, { when: (s) => s.toc.show }),
-			n("Indent per level", "toc.indent", "em", 0, 5, 0.1, { when: (s) => s.toc.show }),
-			n("Line gap", "toc.spacing", "em", 0, 2, 0.05, { when: (s) => s.toc.show }),
-			n("Space above H1", "toc.level1Above", "em", 0, 3, 0.05, { when: (s) => s.toc.show }),
+			n("Size", "toc.size", "pt", 0.5, { when: (s) => s.toc.show }),
+			n("Indent per level", "toc.indent", "em", 0.1, { when: (s) => s.toc.show }),
+			n("Line gap", "toc.spacing", "em", 0.05, { when: (s) => s.toc.show }),
+			n("Space above H1", "toc.level1Above", "em", 0.05, { when: (s) => s.toc.show }),
 			tog("H1 entries bold", "toc.level1Bold", { when: (s) => s.toc.show }),
 			tog("Dot leaders", "toc.leaders", { when: (s) => s.toc.show && s.toc.pageNumbers }),
 			tog("Page numbers", "toc.pageNumbers", { when: (s) => s.toc.show }),
@@ -249,12 +249,12 @@ const SECTIONS: Section[] = [
 		title: "Block quotes",
 		icon: "quote",
 		controls: [
-			n("Size", "quotes.size", "pt", 6, 20, 0.5),
-			n("Line gap", "quotes.leading", "em", 0.2, 2, 0.05),
-			n("Indent left", "quotes.indentLeft", "em", 0, 8, 0.1),
-			n("Indent right", "quotes.indentRight", "em", 0, 8, 0.1),
-			n("Space above", "quotes.above", "em", 0, 4, 0.1),
-			n("Space below", "quotes.below", "em", 0, 4, 0.1),
+			n("Size", "quotes.size", "pt", 0.5),
+			n("Line gap", "quotes.leading", "em", 0.05),
+			n("Indent left", "quotes.indentLeft", "em", 0.1),
+			n("Indent right", "quotes.indentRight", "em", 0.1),
+			n("Space above", "quotes.above", "em", 0.1),
+			n("Space below", "quotes.below", "em", 0.1),
 			tog("Italic", "quotes.italic"),
 		],
 	},
@@ -293,9 +293,9 @@ const SECTIONS: Section[] = [
 				when: (s) => s.bibliography.show,
 				hint: "Ignored if the note places it with ::: {#refs} :::",
 			},
-			n("Size", "bibliography.size", "pt", 6, 16, 0.5, { when: (s) => s.bibliography.show }),
-			n("Hanging indent", "bibliography.hangingIndent", "em", 0, 5, 0.1, { when: (s) => s.bibliography.show }),
-			n("Gap between entries", "bibliography.spacing", "em", 0, 3, 0.05, { when: (s) => s.bibliography.show }),
+			n("Size", "bibliography.size", "pt", 0.5, { when: (s) => s.bibliography.show }),
+			n("Hanging indent", "bibliography.hangingIndent", "em", 0.1, { when: (s) => s.bibliography.show }),
+			n("Gap between entries", "bibliography.spacing", "em", 0.05, { when: (s) => s.bibliography.show }),
 			tog("Justified", "bibliography.justify", { when: (s) => s.bibliography.show }),
 		],
 	},
@@ -316,11 +316,11 @@ const SECTIONS: Section[] = [
 				],
 				{ when: (s) => s.title.show }
 			),
-			n("Title size", "title.size", "pt", 8, 48, 0.5, { when: (s) => s.title.show }),
+			n("Title size", "title.size", "pt", 0.5, { when: (s) => s.title.show }),
 			sel("Weight", "title.weight", WEIGHTS, { when: (s) => s.title.show }),
-			n("Subtitle size", "title.subtitleSize", "pt", 6, 36, 0.5, { when: (s) => s.title.show }),
-			n("Author/date size", "title.metaSize", "pt", 6, 24, 0.5, { when: (s) => s.title.show }),
-			n("Space below", "title.below", "em", 0, 10, 0.1, { when: (s) => s.title.show && !s.title.ownPage }),
+			n("Subtitle size", "title.subtitleSize", "pt", 0.5, { when: (s) => s.title.show }),
+			n("Author/date size", "title.metaSize", "pt", 0.5, { when: (s) => s.title.show }),
+			n("Space below", "title.below", "em", 0.1, { when: (s) => s.title.show && !s.title.ownPage }),
 			tog("Own page", "title.ownPage", { when: (s) => s.title.show }),
 		],
 	},
@@ -328,7 +328,7 @@ const SECTIONS: Section[] = [
 		id: "figures",
 		title: "Figures & tables",
 		icon: "image",
-		controls: [n("Caption size", "figures.captionSize", "pt", 5, 16, 0.5)],
+		controls: [n("Caption size", "figures.captionSize", "pt", 0.5)],
 	},
 ];
 
@@ -341,11 +341,6 @@ function setPath(obj: any, path: string, value: any) {
 	const target = keys.reduce((o, k) => o[k], obj);
 	target[last] = value;
 }
-
-const round = (v: number, step: number) => {
-	const decimals = (String(step).split(".")[1] ?? "").length;
-	return Number((Math.round(v / step) * step).toFixed(decimals));
-};
 
 export interface PanelHost {
 	style(): VitroStyle;
@@ -553,18 +548,17 @@ export class StylePanel {
 		switch (c.kind) {
 			case "number": {
 				const box = ctl.createDiv({ cls: "vitro-num" });
-				const input = box.createEl("input", { type: "number", attr: { min: c.min, max: c.max, step: c.step } });
+				const input = box.createEl("input", { type: "number", attr: { step: c.step } });
 				input.value = String(value);
 				box.createSpan({ cls: "vitro-unit", text: c.unit });
 				const apply = (v: number) => {
 					if (!Number.isFinite(v)) return;
-					v = round(Math.min(c.max, Math.max(c.min, v)), c.step);
 					input.value = String(v);
 					this.commit(c, v, sec, row);
 				};
 				input.oninput = () => {
 					const v = parseFloat(input.value);
-					if (Number.isFinite(v) && v >= c.min && v <= c.max) this.commit(c, v, sec, row);
+					if (Number.isFinite(v)) this.commit(c, v, sec, row);
 				};
 				input.onchange = () => apply(parseFloat(input.value));
 				// drag the label horizontally to scrub the value
@@ -576,7 +570,8 @@ export class StylePanel {
 					row.addClass("is-scrubbing");
 					label.onpointermove = (ev) => {
 						const steps = Math.round((ev.clientX - startX) / 4);
-						const next = round(Math.min(c.max, Math.max(c.min, start + steps * c.step)), c.step);
+						// no snapping to the step grid, just float noise removed
+						const next = Number((start + steps * c.step).toFixed(10));
 						if (String(next) !== input.value) {
 							input.value = String(next);
 							this.commit(c, next, sec, row);

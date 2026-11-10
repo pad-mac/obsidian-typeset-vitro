@@ -122,6 +122,8 @@ export interface VitroStyle {
 	toc: {
 		show: boolean;
 		title: string;
+		/** empty = body font */
+		font: string;
 		depth: number;
 		size: number;
 		level1Bold: boolean;
@@ -246,6 +248,7 @@ export const BASE_STYLE: VitroStyle = {
 	toc: {
 		show: false,
 		title: "Inhalt",
+		font: "",
 		depth: 2,
 		size: 11,
 		level1Bold: true,
