@@ -2,22 +2,30 @@ import { FuzzySuggestModal, MarkdownView, Notice, Plugin, TFile, WorkspaceLeaf, 
 import * as fs from "fs";
 import * as path from "path";
 import chicagoNotes from "../assets/chicago-notes-bibliography.csl";
+import noteCitationsLua from "../assets/note-citations.lua";
+import pageLocatorsLua from "../assets/page-locators.lua";
+import { ZotflowSource } from "./pipeline/zotflow";
 import { DEFAULT_SETTINGS, VitroSettings, VitroSettingTab } from "./settings";
 import { VitroStyle, cloneStyle, makeBuiltInPresets, normalizeStyle, slugify } from "./style/schema";
 import { buildTemplate } from "./style/typst";
 import { listFonts } from "./pipeline/typst";
 import { toolVersion } from "./pipeline/pandoc";
-import { vaultBasePath } from "./pipeline/document";
+import { BuildContext, vaultBasePath } from "./pipeline/document";
 import { PreviewView, VIEW_TYPE_PREVIEW } from "./view/PreviewView";
 
 export default class TypesetVitroPlugin extends Plugin {
 	settings!: VitroSettings;
 	fontCache: Promise<string[]> | null = null;
+	zotflow!: ZotflowSource;
 	private toolCache: Promise<{ pandoc: string | null; typst: string | null }> | null = null;
 
 	async onload() {
 		await this.loadSettings();
-		this.installBundledCsl();
+		this.installBundledAssets();
+		this.zotflow = new ZotflowSource(this.app, path.join(this.pluginDirAbs(), ".cache", "zotflow-citations.json"), () =>
+			this.refreshPreviews(true)
+		);
+		this.register(() => this.zotflow.dispose());
 
 		this.registerView(VIEW_TYPE_PREVIEW, (leaf) => new PreviewView(leaf, this));
 
@@ -137,15 +145,40 @@ export default class TypesetVitroPlugin extends Plugin {
 			.filter(Boolean);
 	}
 
-	private installBundledCsl() {
-		try {
-			const dir = path.join(this.pluginDirAbs(), "csl");
-			fs.mkdirSync(dir, { recursive: true });
-			const file = path.join(dir, "chicago-notes-bibliography.csl");
-			if (!fs.existsSync(file) || fs.readFileSync(file, "utf8") !== chicagoNotes) fs.writeFileSync(file, chicagoNotes, "utf8");
-		} catch (e) {
-			console.error("Typeset Vitro: could not install bundled CSL", e);
-		}
+	private installBundledAssets() {
+		const put = (rel: string, content: string) => {
+			try {
+				const file = path.join(this.pluginDirAbs(), rel);
+				fs.mkdirSync(path.dirname(file), { recursive: true });
+				if (!fs.existsSync(file) || fs.readFileSync(file, "utf8") !== content) fs.writeFileSync(file, content, "utf8");
+			} catch (e) {
+				console.error(`Typeset Vitro: could not install ${rel}`, e);
+			}
+		};
+		put("csl/chicago-notes-bibliography.csl", chicagoNotes);
+		put("filters/note-citations.lua", noteCitationsLua);
+		put("filters/page-locators.lua", pageLocatorsLua);
+		fs.mkdirSync(path.join(this.pluginDirAbs(), ".cache"), { recursive: true });
+	}
+
+	buildContext(): BuildContext {
+		return {
+			pluginDirAbs: this.pluginDirAbs(),
+			zotflow: this.zotflow,
+			noteCitationsFilter: path.join(this.pluginDirAbs(), "filters", "note-citations.lua"),
+			pageLocatorsFilter: path.join(this.pluginDirAbs(), "filters", "page-locators.lua"),
+		};
+	}
+
+	/** .csl files in ZotFlow's styles folder, as citation-style options. */
+	zotflowStyles(): [string, string][] {
+		const folder = this.zotflow?.stylesFolder();
+		if (!folder) return [];
+		return this.app.vault
+			.getFiles()
+			.filter((f) => f.extension === "csl" && f.path.startsWith(folder.replace(/\/+$/, "") + "/"))
+			.map((f) => [`vault:${f.path}`, `ZotFlow: ${f.basename}`] as [string, string])
+			.sort((a, b) => a[1].localeCompare(b[1]));
 	}
 
 	checkTools(force = false) {

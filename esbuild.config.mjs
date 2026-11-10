@@ -13,7 +13,7 @@ const ctx = await esbuild.context({
   logLevel: "info",
   sourcemap: prod ? false : "inline",
   treeShaking: true,
-  loader: { ".csl": "text" },
+  loader: { ".csl": "text", ".lua": "text" },
   outfile: "main.js",
   minify: prod,
 });

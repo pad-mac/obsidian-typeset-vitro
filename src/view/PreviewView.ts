@@ -212,7 +212,10 @@ export class PreviewView extends ItemView {
 			this.pinBtn.toggleClass("is-active", this.pinned);
 			this.app.workspace.requestSaveLayout();
 		});
-		btn("refresh-cw", "Re-run (e.g. after updating your Zotero library)", () => this.requestContent(true));
+		btn("refresh-cw", "Re-run, re-reading citation data", () => {
+			this.plugin.zotflow.clear();
+			this.requestContent(true);
+		});
 		this.panelBtn = btn("sliders-horizontal", "Style panel", () => this.setPanelOpen(!this.plugin.settings.panelOpen));
 		btn("file-down", "Export PDF", () => this.exportPdf(), "vitro-export");
 		this.updateZoomLabel();
@@ -328,7 +331,7 @@ export class PreviewView extends ItemView {
 			const text = this.liveText ?? this.openEditorText() ?? (await this.app.vault.cachedRead(file));
 			const fm = readFrontmatter(text);
 			const style = this.plugin.presetByName(fm.typeset) ?? this.plugin.activePreset();
-			const body = await buildBody(this.app, this.plugin.settings, style, file, text, this.plugin.pluginDirAbs());
+			const body = await buildBody(this.app, this.plugin.settings, style, file, text, this.plugin.buildContext());
 			if (id !== this.run || file !== this.file) return;
 			this.body = body;
 			this.bodyKey = pandocKey(style);
@@ -609,7 +612,7 @@ export class PreviewView extends ItemView {
 			const text = this.liveText ?? this.openEditorText() ?? (await this.app.vault.read(file));
 			const fm = readFrontmatter(text);
 			const style = this.plugin.presetByName(fm.typeset) ?? this.plugin.activePreset();
-			const body = await buildBody(this.app, this.plugin.settings, style, file, text, this.plugin.pluginDirAbs());
+			const body = await buildBody(this.app, this.plugin.settings, style, file, text, this.plugin.buildContext());
 			const doc = buildDocument(style, body.meta, body.body);
 			fs.mkdirSync(this.cacheDir, { recursive: true });
 			const src = path.join(this.cacheDir, "export.typ");

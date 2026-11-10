@@ -13,7 +13,9 @@ note (Markdown) ──► Pandoc + citeproc ──► Typst ──► pages in t
 - Obsidian desktop
 - [Pandoc](https://pandoc.org/installing.html) 3.x: `winget install --id JohnMacFarlane.Pandoc`
 - [Typst](https://github.com/typst/typst) 0.13 or newer: `winget install --id Typst.Typst`
-- For citations: Zotero with [Better BibTeX](https://retorque.re/zotero-better-bibtex/). Export your library (or a collection) as **Better CSL JSON** and turn on **Keep updated**. Then put the path of that file under Settings → Typeset Vitro → Bibliography file.
+- For citations, either:
+  - **ZotFlow Evo**: nothing to set up. Typeset Vitro reads the citation data from ZotFlow's library (see below), or
+  - Zotero with [Better BibTeX](https://retorque.re/zotero-better-bibtex/). Export your library (or a collection) as **Better CSL JSON** and turn on **Keep updated**. Then put the path of that file under Settings → Typeset Vitro → Bibliography file.
 
 Restart Obsidian after installing Pandoc or Typst so it picks up the new `PATH`. Alternatively, enter the full paths to the executables in the settings.
 
@@ -30,6 +32,24 @@ Add `pad-mac/obsidian-typeset-vitro` in BRAT.
    - with a note style (the default is Chicago notes), every citation becomes a footnote by itself
 3. The **style panel** (slider icon) has sections for Page, Body text, Headings (H1/H2/H3+), Footnotes, Block quotes, Citations & bibliography, Title and Figures. Every change shows up within a fraction of a second. You can also drag a number field's label left or right to scrub its value.
 4. **Export PDF** (download icon). The PDF goes next to the note, or into the folder set in the settings.
+
+### Citations with ZotFlow
+
+When ZotFlow Evo is enabled, every `@citekey` in the note is looked up in ZotFlow's library: the item's citation key, or its Zotero item key if it has none. That is the same rule ZotFlow uses when it inserts citations. After each ZotFlow sync the data is read again; the refresh button does the same. If ZotFlow Evo is older than 1.7.1-beta.21, Typeset Vitro reads ZotFlow's local database directly. That works too, but items synced without citation data are then reported as not found.
+
+The intended format is Pandoc citations inside footnotes, with your own remarks around them:
+
+```markdown
+Der Transrapid schwebte.[^latour1996-p45]
+
+[^latour1996-p45]: [@latour1996, pp. 45]
+[^k1]: Vgl. dazu kritisch [@simondon1958, 12]; anders [@kittler1986].
+```
+
+- The CSL style formats every citation: first full form, then short forms, and *ibid.*/*Ebd.* if the style uses them. A footnote label used twice gives two footnotes in the PDF, as print needs.
+- With a note style, citations inside your own text in a footnote are set without the parentheses Pandoc otherwise adds ("Vgl. dazu kritisch Gilbert Simondon, *Du mode …*, 12").
+- Page labels work in any language: `pp. 45`, `p. 45`, `S. 45` and `Seite 45` all become the style's own page form. Other locators (`chap.`, `Bd.`) are left as written.
+- CSL styles in ZotFlow's CSL styles folder appear in the panel's citation style list.
 
 ### Frontmatter the plugin reads
 

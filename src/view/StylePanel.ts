@@ -14,7 +14,7 @@ interface Base {
 }
 type Ctl =
 	| (Base & { kind: "number"; unit: string; min: number; max: number; step: number })
-	| (Base & { kind: "select"; options: [string, string][] })
+	| (Base & { kind: "select"; options: [string, string][] | ((plugin: TypesetVitroPlugin) => [string, string][]) })
 	| (Base & { kind: "toggle" })
 	| (Base & { kind: "font"; placeholder?: string })
 	| (Base & { kind: "text"; placeholder?: string });
@@ -37,7 +37,12 @@ const n = (label: string, path: Path, unit: string, min: number, max: number, st
 	step,
 	...extra,
 });
-const sel = (label: string, path: Path, options: [string, string][], extra: Partial<Base> = {}): Ctl => ({ kind: "select", label, path, options, ...extra });
+const sel = (
+	label: string,
+	path: Path,
+	options: [string, string][] | ((plugin: TypesetVitroPlugin) => [string, string][]),
+	extra: Partial<Base> = {}
+): Ctl => ({ kind: "select", label, path, options, ...extra });
 const tog = (label: string, path: Path, extra: Partial<Base> = {}): Ctl => ({ kind: "toggle", label, path, ...extra });
 
 const WEIGHTS: [string, string][] = [
@@ -189,12 +194,13 @@ const SECTIONS: Section[] = [
 			sel(
 				"Citation style",
 				"citations.style",
-				[
+				(plugin) => [
 					["bundled:chicago-notes-bibliography", "Chicago — notes (footnotes)"],
 					["pandoc-default", "Chicago — author-date"],
+					...plugin.zotflowStyles(),
 					["custom", "Other CSL file…"],
 				],
-				{ content: true }
+				{ content: true, hint: "Styles in ZotFlow's CSL styles folder are listed too." }
 			),
 			{
 				kind: "text",
@@ -203,7 +209,7 @@ const SECTIONS: Section[] = [
 				placeholder: "Absolute path to .csl",
 				content: true,
 				hint: "Any style from zotero.org/styles. Note styles put citations in footnotes.",
-				when: (s) => !s.citations.style.startsWith("bundled:") && s.citations.style !== "pandoc-default",
+				when: (s) => !s.citations.style.startsWith("bundled:") && !s.citations.style.startsWith("vault:") && s.citations.style !== "pandoc-default",
 			},
 			tog("Print bibliography", "bibliography.show", { content: true }),
 			{
@@ -504,9 +510,10 @@ export class StylePanel {
 			}
 			case "select": {
 				const select = ctl.createEl("select", { cls: "dropdown" });
-				for (const [v, t] of c.options) select.createEl("option", { value: v, text: t });
+				const options = typeof c.options === "function" ? c.options(this.plugin) : c.options;
+				for (const [v, t] of options) select.createEl("option", { value: v, text: t });
 				let current = String(value);
-				if (c.path === "citations.style" && !c.options.some(([v]) => v === current)) current = "custom";
+				if (c.path === "citations.style" && !options.some(([v]) => v === current)) current = "custom";
 				select.value = current;
 				select.onchange = () => {
 					let v: string = select.value;

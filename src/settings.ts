@@ -7,6 +7,7 @@ export interface VitroSettings {
 	typstPath: string;
 	fontPaths: string;
 	bibliography: string;
+	citationSource: "auto" | "zotflow" | "file";
 	exportFolder: string;
 	openAfterExport: boolean;
 	openPdfWith: "obsidian" | "default";
@@ -26,6 +27,7 @@ export const DEFAULT_SETTINGS: VitroSettings = {
 	typstPath: "typst",
 	fontPaths: "",
 	bibliography: "",
+	citationSource: "auto",
 	exportFolder: "",
 	openAfterExport: true,
 	openPdfWith: "obsidian",
@@ -89,10 +91,32 @@ export class VitroSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl).setName("Citations").setHeading();
+		const mode = this.plugin.zotflow.mode();
+		new Setting(containerEl)
+			.setName("Citation data from")
+			.setDesc(
+				mode === "api"
+					? "ZotFlow Evo found — citations come straight from its library."
+					: mode === "database"
+					? "ZotFlow found (older build without the citation API) — reading its local library directly."
+					: "ZotFlow isn't installed or enabled — using the bibliography file."
+			)
+			.addDropdown((d) =>
+				d
+					.addOption("auto", "ZotFlow if available, else the file")
+					.addOption("zotflow", "ZotFlow")
+					.addOption("file", "Bibliography file")
+					.setValue(s.citationSource)
+					.onChange(async (v) => {
+						s.citationSource = v as any;
+						await this.plugin.saveSettings();
+						this.plugin.refreshPreviews(true);
+					})
+			);
 		new Setting(containerEl)
 			.setName("Bibliography file")
 			.setDesc(
-				"Absolute path to your library exported by Better BibTeX (Better CSL JSON or .bib, with “Keep updated” on). A note's own `bibliography:` frontmatter takes precedence."
+				"Optional with ZotFlow. Absolute path to a library exported by Better BibTeX (Better CSL JSON or .bib, “Keep updated” on). With ZotFlow it's used in addition, for anything not in ZotFlow. A note's own `bibliography:` frontmatter takes precedence."
 			)
 			.addText((t) =>
 				t

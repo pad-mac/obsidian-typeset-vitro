@@ -5,6 +5,35 @@ import { VitroStyle } from "../style/schema";
 import { DocMeta } from "../style/typst";
 import { pandocToTypst } from "./pandoc";
 import { preprocess, splitFrontmatter } from "./preprocess";
+import * as fs from "fs";
+import { ZotflowSource, extractCitekeys } from "./zotflow";
+
+export interface BuildContext {
+	pluginDirAbs: string;
+	zotflow: ZotflowSource;
+	/** Lua filter that removes citeproc's parentheses around citations in footnotes */
+	noteCitationsFilter: string;
+	/** Lua filter that accepts page labels in any language (pp., S., p. …) */
+	pageLocatorsFilter: string;
+}
+
+const noteStyleCache = new Map<string, { mtime: number; note: boolean }>();
+
+/** CSL "note" styles turn citations into footnotes (Chicago notes, most German humanities styles). */
+export function isNoteStyle(cslPath: string): boolean {
+	if (!cslPath) return false; // Pandoc's built-in style is author-date
+	try {
+		const mtime = fs.statSync(cslPath).mtimeMs;
+		const hit = noteStyleCache.get(cslPath);
+		if (hit && hit.mtime === mtime) return hit.note;
+		const head = fs.readFileSync(cslPath, "utf8").slice(0, 4000);
+		const note = /<style\b[^>]*\bclass\s*=\s*["']note["']/.test(head);
+		noteStyleCache.set(cslPath, { mtime, note });
+		return note;
+	} catch {
+		return false;
+	}
+}
 
 export interface BodyResult {
 	body: string;
@@ -53,11 +82,18 @@ export function pandocKey(s: VitroStyle): string {
 	return JSON.stringify([s.citations, s.bibliography.show, s.bibliography.title, s.text.lang]);
 }
 
-export function resolveCsl(style: VitroStyle, pluginDirAbs: string): string {
+export function resolveCsl(style: VitroStyle, pluginDirAbs: string, vaultBase: string): string {
 	const c = style.citations.style;
 	if (!c || c === "pandoc-default") return "";
 	if (c.startsWith("bundled:")) return path.join(pluginDirAbs, "csl", c.slice(8) + ".csl");
+	if (c.startsWith("vault:")) return path.join(vaultBase, c.slice(6));
 	return c;
+}
+
+export function useZotflow(settings: VitroSettings, zotflow: ZotflowSource): boolean {
+	if (settings.citationSource === "file") return false;
+	if (settings.citationSource === "zotflow") return true;
+	return zotflow.mode() !== "none";
 }
 
 export async function buildBody(
@@ -66,7 +102,7 @@ export async function buildBody(
 	style: VitroStyle,
 	file: TFile,
 	text: string,
-	pluginDirAbs: string
+	ctx: BuildContext
 ): Promise<BodyResult> {
 	const base = vaultBasePath(app);
 	const fm = readFrontmatter(text);
@@ -85,12 +121,30 @@ export async function buildBody(
 	);
 
 	const hasRefsDiv = /:::\s*\{#refs\}/.test(pre.markdown);
-	const bib = fm.bibliography ? "" : settings.bibliography;
+	const warnings = [...pre.warnings];
+	const bibliographies: string[] = [];
+	const citekeys = extractCitekeys(pre.markdown);
+	let zotflowMissing: string[] = [];
+
+	if (!fm.bibliography && citekeys.length && useZotflow(settings, ctx.zotflow)) {
+		if (ctx.zotflow.mode() === "none") {
+			warnings.push("Citation data is set to come from ZotFlow, but ZotFlow isn't enabled.");
+		} else {
+			const z = await ctx.zotflow.resolve(citekeys);
+			bibliographies.push(z.file);
+			zotflowMissing = z.missing;
+			if (z.warning) warnings.push(z.warning);
+		}
+	}
+	if (!fm.bibliography && settings.bibliography) bibliographies.push(settings.bibliography);
+
+	const csl = resolveCsl(style, ctx.pluginDirAbs, base);
 	const res = await pandocToTypst(pre.markdown, {
 		pandocPath: settings.pandocPath,
 		cwd: base,
-		bibliography: bib,
-		csl: resolveCsl(style, pluginDirAbs),
+		bibliographies,
+		luaFilters: [ctx.pageLocatorsFilter, ...(isNoteStyle(csl) ? [ctx.noteCitationsFilter] : [])],
+		csl,
 		lang: fm.lang ? undefined : style.text.lang,
 		bibliographyTitle: style.bibliography.show && !hasRefsDiv ? style.bibliography.title.trim() : undefined,
 		suppressBibliography: !style.bibliography.show,
@@ -99,9 +153,24 @@ export async function buildBody(
 		docHasCsl: !!fm.csl,
 	});
 
-	const warnings = [...pre.warnings, ...res.warnings];
-	if (!bib && !fm.bibliography && /\[[^\]]*@[\w:.#$%&\-+?<>~/]+/.test(pre.markdown)) {
-		warnings.push("Citations found but no bibliography file is set (Settings → Typeset Vitro).");
+	// one clear line per unknown key instead of Pandoc's generic warning
+	const unknown = new Set<string>();
+	for (const w of res.warnings) {
+		const m = w.match(/^Citeproc: citation (\S+) not found/);
+		if (m) unknown.add(m[1]);
+		else warnings.push(w);
+	}
+	if (unknown.size) {
+		const viaZotflow = useZotflow(settings, ctx.zotflow) && ctx.zotflow.mode() !== "none";
+		const where = viaZotflow ? (settings.bibliography ? "in ZotFlow or the bibliography file" : "in your ZotFlow library") : "in the bibliography file";
+		const hint =
+			viaZotflow && ctx.zotflow.mode() === "database"
+				? " — if they are in Zotero, run a ZotFlow sync (or update ZotFlow Evo, which can then fetch missing citation data)."
+				: "";
+		warnings.push(`Not found ${where}: ${[...unknown].map((k) => "@" + k).join(", ")}${hint}`);
+	}
+	if (!bibliographies.length && !fm.bibliography && citekeys.length) {
+		warnings.push("Citations found but there's no citation source: enable ZotFlow or set a bibliography file (Settings → Typeset Vitro).");
 	}
 	return { body: res.typst, meta: metaFrom(fm, file), frontmatter: fm, warnings };
 }

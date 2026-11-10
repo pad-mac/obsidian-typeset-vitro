@@ -3,8 +3,10 @@ import { spawn } from "child_process";
 export interface PandocOptions {
 	pandocPath: string;
 	cwd: string;
-	/** absolute path or "" */
-	bibliography: string;
+	/** absolute paths */
+	bibliographies: string[];
+	/** applied before citeproc, in order */
+	luaFilters?: string[];
 	/** absolute path to .csl, or "" for Pandoc's built-in Chicago author-date */
 	csl: string;
 	lang?: string;
@@ -63,8 +65,10 @@ export function runProcess(
 
 export async function pandocToTypst(markdown: string, o: PandocOptions): Promise<PandocResult> {
 	const reader = "markdown+mark+tex_math_dollars" + (o.hardLineBreaks ? "+hard_line_breaks" : "");
-	const args = ["-f", reader, "-t", "typst", "--wrap=none", "--citeproc"];
-	if (o.bibliography && !o.docHasBibliography) args.push("--bibliography", o.bibliography);
+	const args = ["-f", reader, "-t", "typst", "--wrap=none"];
+	for (const f of o.luaFilters ?? []) args.push("--lua-filter", f);
+	args.push("--citeproc");
+	if (!o.docHasBibliography) for (const b of o.bibliographies) args.push("--bibliography", b);
 	if (o.csl && !o.docHasCsl) args.push("--csl", o.csl);
 	if (o.lang) args.push("-M", `lang=${o.lang}`);
 	if (o.bibliographyTitle) args.push("-M", `reference-section-title=${o.bibliographyTitle}`);
