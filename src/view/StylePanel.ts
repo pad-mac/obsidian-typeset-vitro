@@ -1,5 +1,6 @@
 import { Menu, Modal, Setting, setIcon, setTooltip } from "obsidian";
 import type TypesetVitroPlugin from "../main";
+import { FontPicker } from "./FontPicker";
 import { PAPERS, VitroStyle, cloneStyle, makeBuiltInPresets } from "../style/schema";
 
 type Path = string;
@@ -358,7 +359,7 @@ export class StylePanel {
 	private get level() {
 		return this.tabOf.get("headings") ?? 0;
 	}
-	private datalistId = "vitro-fonts-" + Math.random().toString(36).slice(2, 8);
+	private pickers: FontPicker[] = [];
 	private scrollEl!: HTMLElement;
 
 	constructor(private el: HTMLElement, private plugin: TypesetVitroPlugin, private host: PanelHost) {
@@ -366,12 +367,12 @@ export class StylePanel {
 	}
 
 	render() {
+		for (const p of this.pickers) p.dispose();
+		this.pickers = [];
 		const scroll = this.scrollEl?.scrollTop ?? 0;
 		this.el.empty();
 		this.renderPresetBar();
 		this.scrollEl = this.el.createDiv({ cls: "vitro-panel-scroll" });
-		const dl = this.scrollEl.createEl("datalist", { attr: { id: this.datalistId } });
-		this.plugin.fonts().then((fonts) => fonts.forEach((f) => dl.createEl("option", { value: f })));
 		for (const sec of SECTIONS) this.renderSection(sec);
 		this.scrollEl.scrollTop = scroll;
 	}
@@ -631,20 +632,23 @@ export class StylePanel {
 				};
 				break;
 			}
-			case "font":
+			case "font": {
+				const picker = new FontPicker(ctl, this.plugin, value ?? "", c.placeholder, (v) => this.commitQuiet(c, v));
+				this.pickers.push(picker);
+				break;
+			}
 			case "text": {
 				const input = ctl.createEl("input", {
 					type: "text",
 					cls: "vitro-text",
 					attr: { placeholder: c.placeholder ?? "", spellcheck: "false" },
 				});
-				if (c.kind === "font") input.setAttr("list", this.datalistId);
 				input.value = value ?? "";
 				let t: number | null = null;
 				input.oninput = () => {
 					if (t) window.clearTimeout(t);
 					// fonts: wait until a name is complete-ish, avoids warnings mid-typing
-					t = window.setTimeout(() => this.commitQuiet(c, input.value.trim()), c.kind === "font" ? 350 : 500);
+					t = window.setTimeout(() => this.commitQuiet(c, input.value.trim()), 500);
 				};
 				break;
 			}

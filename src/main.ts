@@ -9,6 +9,7 @@ import { DEFAULT_SETTINGS, VitroSettings, VitroSettingTab } from "./settings";
 import { VitroStyle, cloneStyle, makeBuiltInPresets, normalizeStyle, slugify } from "./style/schema";
 import { buildTemplate } from "./style/typst";
 import { listFonts } from "./pipeline/typst";
+import { renderFontPreviews } from "./pipeline/fontPreviews";
 import { toolVersion } from "./pipeline/pandoc";
 import { BuildContext, vaultBasePath } from "./pipeline/document";
 import { PreviewView, VIEW_TYPE_PREVIEW } from "./view/PreviewView";
@@ -16,6 +17,7 @@ import { PreviewView, VIEW_TYPE_PREVIEW } from "./view/PreviewView";
 export default class TypesetVitroPlugin extends Plugin {
 	settings!: VitroSettings;
 	fontCache: Promise<string[]> | null = null;
+	private previewCache: Promise<Map<string, string>> | null = null;
 	zotflow!: ZotflowSource;
 	private toolCache: Promise<{ pandoc: string | null; typst: string | null }> | null = null;
 
@@ -196,6 +198,38 @@ export default class TypesetVitroPlugin extends Plugin {
 		return this.fontCache;
 	}
 
+	/** Family → path of an SVG with the family's name set in that font (rendered by Typst). */
+	fontPreviews(): Promise<Map<string, string>> {
+		if (!this.previewCache) {
+			this.previewCache = (async () => {
+				const [fonts, tools] = await Promise.all([this.fonts(), this.checkTools()]);
+				return renderFontPreviews({
+					typstPath: this.settings.typstPath,
+					fontPaths: this.fontPaths(),
+					fonts,
+					cacheRoot: path.join(this.pluginDirAbs(), ".cache"),
+					typstVersion: tools.typst ?? "",
+				});
+			})();
+			this.previewCache.catch((e) => {
+				console.error("Typeset Vitro: font previews failed", e);
+				this.previewCache = null;
+			});
+		}
+		return this.previewCache;
+	}
+
+	/** Re-scan installed fonts (e.g. after installing fonts) and restart the previews' Typst. */
+	reloadFonts() {
+		this.restartPreviews();
+	}
+
+	/** URL Obsidian can load for a file inside the vault folder (plugin cache included). */
+	fileUrl(absPath: string): string {
+		const rel = path.relative(vaultBasePath(this.app), absPath).split(path.sep).join("/");
+		return this.app.vault.adapter.getResourcePath(rel);
+	}
+
 	// ---------- views ----------
 
 	previews(): PreviewView[] {
@@ -212,6 +246,7 @@ export default class TypesetVitroPlugin extends Plugin {
 	restartPreviews() {
 		this.toolCache = null;
 		this.fontCache = null;
+		this.previewCache = null;
 		for (const v of this.previews()) v.restart();
 	}
 

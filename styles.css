@@ -475,3 +475,133 @@
 .workspace-leaf-content[data-type="typeset-vitro-preview"] > .view-header {
 	display: none;
 }
+
+/* ───────── font picker ───────── */
+.vitro-font-trigger {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	width: 100%;
+	height: 28px;
+	padding: 0 4px 0 8px;
+	border-radius: var(--input-radius);
+	background: var(--background-modifier-form-field);
+	border: 1px solid var(--background-modifier-border);
+	cursor: pointer;
+	overflow: hidden;
+	transition: border-color var(--vitro-fast, 140ms) ease, box-shadow var(--vitro-fast, 140ms) ease;
+}
+.vitro-font-trigger:hover {
+	border-color: var(--background-modifier-border-hover);
+}
+.vitro-font-trigger:focus-visible {
+	outline: none;
+	border-color: var(--interactive-accent);
+	box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.15);
+}
+.vitro-font-face {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	overflow: hidden;
+}
+.vitro-font-chevron {
+	display: flex;
+	color: var(--text-faint);
+	flex-shrink: 0;
+}
+.vitro-font-chevron svg {
+	width: 13px;
+	height: 13px;
+}
+.vitro-font-img {
+	height: 18px;
+	width: auto;
+	max-width: none;
+	display: block;
+	user-select: none;
+	-webkit-user-drag: none;
+}
+.theme-dark .vitro-font-img {
+	filter: invert(1);
+}
+.vitro-font-plain,
+.vitro-font-placeholder {
+	font-size: var(--font-ui-smaller);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.vitro-font-placeholder,
+.vitro-font-plain.is-pending {
+	color: var(--text-faint);
+}
+
+.vitro-font-pop {
+	position: fixed;
+	z-index: var(--layer-menu, 65);
+	display: flex;
+	flex-direction: column;
+	max-height: min(420px, 70vh);
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	box-shadow: var(--shadow-l);
+	overflow: hidden;
+	animation: vitro-pop-in 120ms ease;
+}
+@keyframes vitro-pop-in {
+	from {
+		opacity: 0;
+		transform: translateY(-3px);
+	}
+}
+.vitro-font-search {
+	margin: 8px;
+	height: 28px;
+	font-size: var(--font-ui-small) !important;
+}
+.vitro-font-list {
+	flex: 1;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	padding: 0 4px 4px;
+}
+.vitro-font-row {
+	height: 34px;
+	display: flex;
+	align-items: center;
+	padding: 0 8px;
+	border-radius: var(--radius-s);
+	cursor: pointer;
+	overflow: hidden;
+	transition: background-color 80ms ease;
+}
+.vitro-font-row:hover {
+	background: var(--background-modifier-hover);
+}
+.vitro-font-row.is-active {
+	background: var(--background-modifier-active-hover, var(--background-modifier-hover));
+	box-shadow: inset 2px 0 0 var(--interactive-accent);
+}
+.vitro-font-row .vitro-font-img {
+	height: 22px;
+}
+.vitro-font-row.is-custom {
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+}
+.vitro-font-foot {
+	border-top: 1px solid var(--background-modifier-border);
+	padding: 6px 12px;
+}
+.vitro-font-reload {
+	font-size: var(--font-ui-smaller);
+	color: var(--text-muted);
+	cursor: pointer;
+	transition: color var(--vitro-fast, 140ms) ease;
+}
+.vitro-font-reload:hover {
+	color: var(--text-normal);
+}

@@ -1,6 +1,6 @@
 {
   "name": "obsidian-typeset-vitro",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Live typeset preview for Obsidian (Pandoc + Typst)",
   "main": "main.js",
   "scripts": {
